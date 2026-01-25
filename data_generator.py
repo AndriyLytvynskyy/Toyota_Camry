@@ -47,40 +47,40 @@ def generate_test_data():
     ad_clicks = []
 
     # # User 1: Normal scenario - click before page view
-    # ad_clicks.append({
-    #     'user_id': 'user_1',
-    #     'event_time': (base_time + timedelta(minutes=5)).isoformat(),
-    #     'campaign_id': 'campaign_A',
-    #     'click_id': 'click_1',
-    #     'processing_time': base_time + timedelta(minutes=5, seconds=1)
+    ad_clicks.append({
+        'user_id': 'user_1',
+        'event_time': (base_time + timedelta(minutes=5)).isoformat(),
+        'campaign_id': 'campaign_A',
+        'click_id': 'click_1',
+        'processing_time': base_time + timedelta(minutes=5, seconds=1)
+    })
+
+    page_views.append({
+        'user_id': 'user_1',
+        'event_time': (base_time + timedelta(minutes=10)).isoformat(),
+        'url': 'https://example.com/product1',
+        'event_id': 'pv_1',
+        'processing_time': base_time + timedelta(minutes=10, seconds=2)
+    })
+
+    # # User 2: Click arrives AFTER page view (out of order, within lateness)
+    # page_views.append({
+    #     'user_id': 'user_2',
+    #     'event_time': (base_time + timedelta(minutes=15)).isoformat(),
+    #     'url': 'https://example.com/product2',
+    #     'event_id': 'pv_2',
+    #     'processing_time': base_time + timedelta(minutes=15, seconds=1)
     # })
     #
-    # page_views.append({
-    #     'user_id': 'user_1',
-    #     'event_time': (base_time + timedelta(minutes=10)).isoformat(),
-    #     'url': 'https://example.com/product1',
-    #     'event_id': 'pv_1',
-    #     'processing_time': base_time + timedelta(minutes=10, seconds=2)
+    # ad_clicks.append({
+    #     'user_id': 'user_2',
+    #     'event_time': (base_time + timedelta(minutes=12)).isoformat(),
+    #     'campaign_id': 'campaign_B',
+    #     'click_id': 'click_2',
+    #     'processing_time': base_time + timedelta(minutes=16, seconds=0)  # Late arrival
     # })
-
-    # User 2: Click arrives AFTER page view (out of order, within lateness)
-    page_views.append({
-        'user_id': 'user_2',
-        'event_time': (base_time + timedelta(minutes=15)).isoformat(),
-        'url': 'https://example.com/product2',
-        'event_id': 'pv_2',
-        'processing_time': base_time + timedelta(minutes=15, seconds=1)
-    })
-
-    ad_clicks.append({
-        'user_id': 'user_2',
-        'event_time': (base_time + timedelta(minutes=12)).isoformat(),
-        'campaign_id': 'campaign_B',
-        'click_id': 'click_2',
-        'processing_time': base_time + timedelta(minutes=16, seconds=0)  # Late arrival
-    })
-
-    # User 3: Multiple clicks in window - should pick latest
+    #
+    # # User 3: Multiple clicks in window - should pick latest
     # ad_clicks.append({
     #     'user_id': 'user_3',
     #     'event_time': (base_time + timedelta(minutes=20)).isoformat(),
@@ -104,8 +104,8 @@ def generate_test_data():
     #     'event_id': 'pv_3',
     #     'processing_time': base_time + timedelta(minutes=30, seconds=2)
     # })
-
-    # User 4: Click outside 30-minute window - should NOT be attributed
+    #
+    # #User 4: Click outside 30-minute window - should NOT be attributed
     # ad_clicks.append({
     #     'user_id': 'user_4',
     #     'event_time': (base_time + timedelta(minutes=35)).isoformat(),
