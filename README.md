@@ -1,5 +1,5 @@
 # Toyota Camry Processor
-I ended up implementing 'emit immediately, update later' mode. Please see my text below.
+I ended up implementing 'emit immediately, update later' mode. Please see my explanation and reasoning below.
 ## Watermark logic
 Both input streams `ad_click` and `page_views` are partitioned by user_id. It means that: 
 * all events for a given `user_id` go to the same Kafka partition
