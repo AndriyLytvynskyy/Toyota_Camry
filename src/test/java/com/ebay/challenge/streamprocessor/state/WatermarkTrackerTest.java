@@ -1,5 +1,6 @@
 package com.ebay.challenge.streamprocessor.state;
 
+import com.ebay.challenge.streamprocessor.model.StreamType;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -18,18 +19,29 @@ public class WatermarkTrackerTest {
         assertThat(tracker.getWatermark(0)).isEqualTo(Instant.MIN);
     }
 
-    /**
-     * Watermark should update as events arrive.
-     */
     @Test
-    public void testWatermarkUpdatesWithEvents() {
+    public void testWatermarkRequiresBothStreams() {
         WatermarkTracker tracker = new WatermarkTracker(5);
-        Instant eventTime = Instant.parse("2024-01-01T12:00:00Z");
-        tracker.updateWatermark(0, eventTime);
-        Instant expectedWatermark =
-                eventTime.minus(Duration.ofMinutes(5));
-        assertThat(tracker.getWatermark(0))
-                .isEqualTo(expectedWatermark);
+        Instant t = Instant.parse("2024-01-01T12:00:00Z");
+        tracker.updateWatermark(StreamType.AD_CLICKS, 0, t);
+        // in case we don't have events in topic 'page_views'
+        assertThat(tracker.getWatermark(0)).isEqualTo(Instant.MIN);
+    }
+
+    @Test
+    public void testWatermarkUsesMinOfStreams() {
+        WatermarkTracker tracker = new WatermarkTracker(5);
+
+        Instant clickTime = Instant.parse("2024-01-01T12:10:00Z");
+        Instant viewTime  = Instant.parse("2024-01-01T12:05:00Z");
+
+        tracker.updateWatermark(StreamType.AD_CLICKS, 0, clickTime);
+        tracker.updateWatermark(StreamType.PAGE_VIEWS, 0, viewTime);
+
+        Instant expected =
+                viewTime.minus(Duration.ofMinutes(5));
+
+        assertThat(tracker.getWatermark(0)).isEqualTo(expected);
     }
 
     /**
@@ -38,16 +50,17 @@ public class WatermarkTrackerTest {
     @Test
     public void testLateEventDetection() {
         WatermarkTracker tracker = new WatermarkTracker(5);
-        Instant baseTime = Instant.parse("2026-01-01T12:00:00Z");
-        tracker.updateWatermark(0, baseTime);
-        // Event older than watermark - lateness
+
+        Instant base = Instant.parse("2024-01-01T12:10:00Z");
+
+        tracker.updateWatermark(StreamType.AD_CLICKS, 0, base);
+        tracker.updateWatermark(StreamType.PAGE_VIEWS, 0, base);
+
+        // 6 minutes older than base → beyond allowed lateness
         Instant lateEvent =
-                baseTime.minus(Duration.ofMinutes(6));
+                base.minus(Duration.ofMinutes(6));
 
-        boolean isLate =
-                tracker.isTooLate(0, lateEvent);
-
-        assertThat(isLate).isTrue();
+        assertThat(tracker.isTooLate(0, lateEvent)).isTrue();
     }
 
     /**
@@ -57,26 +70,28 @@ public class WatermarkTrackerTest {
     @Test
     public void testWatermarkMonotonicallyIncreases() {
         WatermarkTracker tracker = new WatermarkTracker(5);
-        Instant eventOne = Instant.parse("2026-01-24T12:00:00Z");
-        Instant eventTwo = Instant.parse("2026-01-24T12:10:00Z");
-        Instant eventOutOfOrder = Instant.parse("2026-01-20T12:05:00Z");
 
-        tracker.updateWatermark(0, eventOne);
-        Instant watermarkAfterFirst = tracker.getWatermark(0);
+        Instant t1 = Instant.parse("2024-01-01T12:00:00Z");
+        Instant t2 = Instant.parse("2024-01-01T12:10:00Z");
+        Instant outOfOrder = Instant.parse("2024-01-01T11:30:00Z");
 
-        tracker.updateWatermark(0, eventTwo);
-        Instant watermarkAfterSecond = tracker.getWatermark(0);
+        tracker.updateWatermark(StreamType.AD_CLICKS, 0, t1);
+        tracker.updateWatermark(StreamType.PAGE_VIEWS, 0, t1);
 
-        tracker.updateWatermark(0, eventOutOfOrder);
-        Instant watermarkAfterOutOfOrder = tracker.getWatermark(0);
+        Instant w1 = tracker.getWatermark(0);
 
-        assertThat(watermarkAfterSecond)
-                .isAfter(watermarkAfterFirst);
+        tracker.updateWatermark(StreamType.AD_CLICKS, 0, t2);
+        tracker.updateWatermark(StreamType.PAGE_VIEWS, 0, t2);
 
-        assertThat(watermarkAfterOutOfOrder)
-                .isEqualTo(watermarkAfterSecond);
+        Instant w2 = tracker.getWatermark(0);
+
+        // here if we have out of order event - watermark should not move backward
+        tracker.updateWatermark(StreamType.AD_CLICKS, 0, outOfOrder);
+
+        Instant w3 = tracker.getWatermark(0);
+
+        assertThat(w2).isAfter(w1);
+        assertThat(w3).isEqualTo(w2);
     }
-
-
 
 }

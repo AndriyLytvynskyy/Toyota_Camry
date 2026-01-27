@@ -1,7 +1,6 @@
 package com.ebay.challenge.streamprocessor.output;
 
 import com.ebay.challenge.streamprocessor.model.AttributedPageView;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.annotation.PostConstruct;
@@ -15,10 +14,10 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Output sink that writes attributed page views to SQLite database.
- *
+ * <p>
  * Provides idempotent writes using unique constraints on page_view_id.
  * Ensures durability for offset commit safety (at-least-once delivery).
- *
+ * <p>
  * TODO: Complete the database write implementation
  */
 @Slf4j
@@ -55,10 +54,10 @@ public class OutputSink {
 
         // Prepare insert statement
         String insertSql = """
-            INSERT OR REPLACE INTO attributed_page_views
-            (page_view_id, user_id, event_time, url, attributed_campaign_id, attributed_click_id, json_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """;
+                INSERT OR REPLACE INTO attributed_page_views
+                (page_view_id, user_id, event_time, url, attributed_campaign_id, attributed_click_id, json_data)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """;
         insertStatement = connection.prepareStatement(insertSql);
 
         log.info("Output sink initialized successfully");
@@ -66,17 +65,17 @@ public class OutputSink {
 
     private void createTable() throws SQLException {
         String createTableSql = """
-            CREATE TABLE IF NOT EXISTS attributed_page_views (
-                page_view_id TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                event_time TEXT NOT NULL,
-                url TEXT NOT NULL,
-                attributed_campaign_id TEXT,
-                attributed_click_id TEXT,
-                json_data TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """;
+                CREATE TABLE IF NOT EXISTS attributed_page_views (
+                    page_view_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    event_time TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    attributed_campaign_id TEXT,
+                    attributed_click_id TEXT,
+                    json_data TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """;
 
         try (Statement stmt = connection.createStatement()) {
             stmt.execute(createTableSql);
@@ -87,7 +86,7 @@ public class OutputSink {
     /**
      * Write an attributed page view to the database.
      * Uses INSERT OR REPLACE for idempotency (same page_view_id won't create duplicates).
-     *
+     * <p>
      * TODO: Complete the implementation
      * - Serialize the AttributedPageView to JSON
      * - Set all prepared statement parameters
@@ -100,24 +99,21 @@ public class OutputSink {
     public synchronized void write(AttributedPageView attributedPageView) {
         try {
             log.info("Call Output sink");
-            // TODO: Serialize the entire object to JSON
             String jsonData = objectMapper.writeValueAsString(attributedPageView);
 
-            // TODO: Set prepared statement parameters
-             insertStatement.setString(1, attributedPageView.getPageViewId());
-             insertStatement.setString(2, attributedPageView.getUserId());
-             insertStatement.setString(3, attributedPageView.getEventTime().toString());
-             insertStatement.setString(4, attributedPageView.getUrl());
-             insertStatement.setString(5, attributedPageView.getAttributedCampaignId());
-             insertStatement.setString(6, attributedPageView.getAttributedClickId());
-             insertStatement.setString(7, jsonData);
+            insertStatement.setString(1, attributedPageView.getPageViewId());
+            insertStatement.setString(2, attributedPageView.getUserId());
+            insertStatement.setString(3, attributedPageView.getEventTime().toString());
+            insertStatement.setString(4, attributedPageView.getUrl());
+            insertStatement.setString(5, attributedPageView.getAttributedCampaignId());
+            insertStatement.setString(6, attributedPageView.getAttributedClickId());
+            insertStatement.setString(7, jsonData);
 
-            // TODO: Execute the insert
-             insertStatement.executeUpdate();
-             long count = writeCount.incrementAndGet();
+            insertStatement.executeUpdate();
+            long count = writeCount.incrementAndGet();
 
             log.debug("Written attributed page view: {} (total writes: {})",
-                attributedPageView.getPageViewId(), count);
+                    attributedPageView.getPageViewId(), count);
 
         } catch (Exception e) {
             log.error("Failed to write attributed page view: {}", attributedPageView.getPageViewId(), e);

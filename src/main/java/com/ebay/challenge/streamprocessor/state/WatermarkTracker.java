@@ -1,20 +1,34 @@
 package com.ebay.challenge.streamprocessor.state;
 
+import com.ebay.challenge.streamprocessor.model.StreamType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Tracks watermarks per partition to handle out-of-order events.
- * <p>
- * Watermark represents the point in event-time up to which we believe we have seen all events.
- * Events arriving with event_time < watermark - allowedLateness are considered too late.
- * <p>
- * TODO: Implement per-partition watermark tracking
+ * Tracks event-time watermarks for Option B (emit-on-watermark).
+ *
+ * A watermark represents the event-time boundary before which the system
+ * assumes no more events will arrive (accounting for allowed lateness).
+ *
+ * Logical partition id is:
+ *   "<topic>_<partition>"
+ *
+ * Example:
+ *   ad_clicks_0
+ *   page_views_0
+ *
+ * For join correctness, the effective watermark for a Kafka partition is:
+ *
+ *   min(
+ *     maxEventTime(ad_clicks_<partition>),
+ *     maxEventTime(page_views_<partition>)
+ *   ) - allowedLateness
  */
 @Slf4j
 @Component
@@ -22,42 +36,43 @@ public class WatermarkTracker {
 
     private final Duration allowedLateness;
 
-    // TODO: Add data structure to track watermarks per partition
-    // Hint: Use ConcurrentHashMap<Integer, Instant> for thread-safe partition watermarks
-    // this holds partition -> maxEventTime seen
-    private final ConcurrentHashMap<Integer, Instant> partitionMaxEventTimeSeen = new ConcurrentHashMap<>();
-
-    public WatermarkTracker(@Value("${watermark.allowed-lateness-minutes:2}") int allowedLatenessMinutes) {
-        this.allowedLateness = Duration.ofMinutes(allowedLatenessMinutes);
-        log.info("Initialized WatermarkTracker with allowed lateness: {} minutes", allowedLatenessMinutes);
-    }
-
     /**
-     * Chooses later time between existing and incoming
-     * @param existing current time
-     * @param incoming new time
-     * @return time which is later
+     * logicalPartitionId -> maxEventTimeSeen
+     * Example key: "ad_clicks_0" - we need to know which stream it is, not to mix partitions together
      */
-    private Instant chooseLaterInstant(Instant existing, Instant incoming) {
-        return incoming.isAfter(existing) ? incoming : existing;
+    private final Map<String, Instant> partitionMaxEventTimeSeen =
+            new ConcurrentHashMap<>();
+
+    public WatermarkTracker(
+            @Value("${watermark.allowed-lateness-minutes:2}") int allowedLatenessMinutes
+    ) {
+        this.allowedLateness = Duration.ofMinutes(allowedLatenessMinutes);
+        log.info(
+                "Initialized WatermarkTracker with allowed lateness: {} minutes",
+                allowedLatenessMinutes
+        );
     }
 
     /**
      * Update watermark for a partition based on observed event time.
      * Watermark advances monotonically (never goes backward).
-     * <p>
      *
-     * - Update partition watermark if event time is later than current watermark
-     * - Ensure watermark never goes backward
-     * - Handle concurrent updates
+     * Update partition watermark if event time is later than current watermark
+     * Ensure watermark never goes backward
+     * Handle concurrent updates
      *
-     * @param partition the partition ID
-     * @param eventTime the event timestamp
+     * @param stream e.g. "ad_clicks" or page_views
+     * @param partition e.g. "partition number"
+     * @param eventTime event-time timestamp
      */
-    public void updateWatermark(int partition, Instant eventTime) {
-        log.debug("Updating watermark for partition {} with event time {}", partition, eventTime);
-        partitionMaxEventTimeSeen.merge(partition, eventTime,
-                this::chooseLaterInstant);
+    public void updateWatermark(StreamType stream, int partition, Instant eventTime) {
+        String logicalPartitionId = stream.logicalPartition(partition);
+        log.debug("Updating watermark for partition {} with event time {}", logicalPartitionId, eventTime);
+        partitionMaxEventTimeSeen.merge(
+                logicalPartitionId,
+                eventTime,
+                this::chooseLaterInstant
+        );
     }
 
     /**
@@ -70,37 +85,42 @@ public class WatermarkTracker {
      * @return the current watermark, or Instant.MIN if not yet initialized
      */
     public Instant getWatermark(int partition) {
-        Instant maxEvent = partitionMaxEventTimeSeen.get(partition);
-        if (maxEvent == null){
+        Instant clickMax =
+                partitionMaxEventTimeSeen.get(
+                        StreamType.AD_CLICKS.logicalPartition(partition)
+                );
+
+        Instant viewMax =
+                partitionMaxEventTimeSeen.get(
+                        StreamType.PAGE_VIEWS.logicalPartition(partition)
+                );
+
+        if (clickMax == null || viewMax == null) {
             return Instant.MIN;
         }
-        return maxEvent.minus(allowedLateness);
+
+        Instant minMax =
+                clickMax.isBefore(viewMax) ? clickMax : viewMax;
+
+        return minMax.minus(allowedLateness);
     }
 
     /**
-     * Check if an event is too late (beyond allowed lateness).
-     * <p>
-     * - Calculate cutoff time as: watermark - allowedLateness
-     * - Return true if event is before cutoff time
-     * - Handle case when watermark is not yet initialized
+     * Check if an event is too late to be processed.
      *
-     * @param partition the partition ID
-     * @param eventTime the event timestamp
-     * @return true if the event is too late and should be dropped
+     * An event is late if:
+     *   event_time < effective watermark
      */
     public boolean isTooLate(int partition, Instant eventTime) {
         Instant watermark = getWatermark(partition);
-        if (watermark.equals(Instant.MIN)){
-            return false;
-        }
-        return eventTime.isBefore(watermark);
+        return !watermark.equals(Instant.MIN)
+                && eventTime.isBefore(watermark);
     }
 
-    /**
-     * Get the allowed lateness duration.
-     *
-     * @return the allowed lateness duration
-     */
+    private Instant chooseLaterInstant(Instant existing, Instant incoming) {
+        return incoming.isAfter(existing) ? incoming : existing;
+    }
+
     public Duration getAllowedLateness() {
         return allowedLateness;
     }

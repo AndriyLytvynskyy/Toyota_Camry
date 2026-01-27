@@ -14,7 +14,7 @@ public class InMemoryOutputSink extends OutputSink {
         outputs.add(attributedPageView);
     }
 
-    public List<AttributedPageView> getAll() {
+    public List<AttributedPageView> records() {
         return outputs;
     }
 }

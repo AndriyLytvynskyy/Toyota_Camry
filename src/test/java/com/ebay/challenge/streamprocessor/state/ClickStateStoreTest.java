@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Instant;
 
 public class ClickStateStoreTest {
+
     private AdClickEvent click(
             String clickId,
             String userId,

@@ -3,6 +3,7 @@ package com.ebay.challenge.streamprocessor.engine;
 import com.ebay.challenge.streamprocessor.model.AdClickEvent;
 import com.ebay.challenge.streamprocessor.model.AttributedPageView;
 import com.ebay.challenge.streamprocessor.model.PageViewEvent;
+import com.ebay.challenge.streamprocessor.model.StreamType;
 import com.ebay.challenge.streamprocessor.output.OutputSink;
 import com.ebay.challenge.streamprocessor.state.ClickStateStore;
 import com.ebay.challenge.streamprocessor.state.EmittedPageViewStore;
@@ -13,17 +14,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Core join engine that performs windowed attribution joins between page views and ad clicks.
- *
- * Join semantics:
- * - For each page_view, find the most recent ad_click for the same user
- *   within 30 minutes before the page view (in event time)
- * - Handle out-of-order arrivals through watermark tracking
- *
- * TODO: Implement the windowed join logic
+ * Core join engine implementing 'emit immediately':
+ * emit immediately, update later if needed.
  */
 @Slf4j
 @Component
@@ -31,78 +27,137 @@ import java.util.concurrent.ConcurrentHashMap;
 public class JoinEngine {
 
     private final ClickStateStore clickStore;
+    private final EmittedPageViewStore emittedPageViewStore;
     private final WatermarkTracker watermarkTracker;
     private final OutputSink outputSink;
-    private final EmittedPageViewStore emittedPageViewStore;
+
+
+    /**
+     * Track partitions observed by this instance.
+     * Used for periodic eviction.
+     */
+    private final Set<Integer> knownPartitions =
+            ConcurrentHashMap.newKeySet();
+
 
     /**
      * Process an ad click event.
-     * Store the click in state for future attribution.
-     *
-     * - Check if event is too late using watermarkTracker
-     * - Store the click in clickStore
-     * - Update watermark for the partition
-     *
-     * @param click the ad click event
+     * - Update watermark
+     * - Drop if too late
+     * - Store click
+     * - Try updating already emitted page views
      */
     public void processClick(AdClickEvent click) {
-        log.debug("Processing click: {}", click.getClickId());
         int partition = click.getPartition();
         Instant eventTime = click.getEventTime();
+        knownPartitions.add(partition);
+        // Update watermark for click stream
+        watermarkTracker.updateWatermark(StreamType.AD_CLICKS, partition,
+                eventTime
+        );
 
-        if (watermarkTracker.isTooLate(partition, eventTime)){
-            log.warn("We drop late ad click {} (partition = {}, eventTime = {}) ",
-                    click.getClickId(), click.getPartition(), click.getEventTime());
-            // we just return here and do nothing
+        if (watermarkTracker.isTooLate(partition, eventTime)) {
+            log.warn(
+                    "Dropping late ad click {} (partition={}, eventTime={})",
+                    click.getClickId(), partition, eventTime
+            );
             return;
         }
+
+        // Store click
         clickStore.addClick(click);
 
-        watermarkTracker.updateWatermark(partition, eventTime);
-
-        emittedPageViewStore.tryUpdateWithClick(click, outputSink::write);
-
-        log.debug("Stored ad click {} for user {} at {}",
-                    click.getClickId(), click.getUserId(), click.getEventTime()
-                );
-
+        // Try updating emitted page views
+        Instant watermark = watermarkTracker.getWatermark(partition);
+        emittedPageViewStore.tryUpdateWithClick(
+                click,
+                watermark,
+                outputSink::write
+        );
     }
 
     /**
      * Process a page view event.
-     * Find matching click and emit attributed page view.
      *
-     * - Check if event is too late using watermarkTracker
-     * - Find attributable click from clickStore
-     * - Create and emit AttributedPageView
-     * - Update watermark for the partition
-     *
-     * @param pageView the page view event
+     * Semantics (Option B):
+     * - Update watermark
+     * - Drop if too late
+     * - Emit immediately
+     * - Record for possible future updates
      */
     public void processPageView(PageViewEvent pageView) {
-        log.debug("Processing page view: {}", pageView.getEventId());
         int partition = pageView.getPartition();
         Instant eventTime = pageView.getEventTime();
 
-        if (watermarkTracker.isTooLate(partition, eventTime)){
-            log.warn("We drop late page view event {} (partition = {}, eventTime = {}) ",
-                    pageView.getEventId(), pageView.getPartition(), pageView.getEventTime());
-            // page view is late, just return
+        knownPartitions.add(partition);
+        // Update watermark for page view stream
+        watermarkTracker.updateWatermark(
+                StreamType.PAGE_VIEWS, partition,
+                eventTime
+        );
+
+        if (watermarkTracker.isTooLate(partition, eventTime)) {
+            log.warn(
+                    "Dropping late page view {} (partition={}, eventTime={})",
+                    pageView.getEventId(), partition, eventTime
+            );
             return;
         }
 
-        AdClickEvent click = clickStore.findAttributableClick(pageView.getUserId(), eventTime);
+        // Find best click so far
+        AdClickEvent click =
+                clickStore.findAttributableClick(
+                        pageView.getUserId(),
+                        pageView.getEventTime()
+                );
 
-        AttributedPageView attributed = buildAttributedPageView(pageView, click);
-        outputSink.write(attributed);
+        // Emit immediately
+        AttributedPageView output =
+                buildAttributedPageView(pageView, click);
 
-        watermarkTracker.updateWatermark(partition, eventTime);
+        outputSink.write(output);
+
+        // Record for possible updates
         emittedPageViewStore.recordEmittedPageView(pageView, click);
-        log.info("Emitted attributed page view {} (user = {}, click = {})", pageView.getEventId(),
-                pageView.getUserId(), click != null ? click.getClickId(): "none");
+
+        log.info(
+                "Emitted attributed page view {} immediately (user={}, click={})",
+                pageView.getEventId(),
+                pageView.getUserId(),
+                click != null ? click.getClickId() : "none"
+        );
     }
 
-    private AttributedPageView buildAttributedPageView(PageViewEvent pageView, AdClickEvent click){
+
+    @Scheduled(fixedRate = 30000)
+    public void evictFinalizedState() {
+        for (Integer partition : knownPartitions) {
+            Instant watermark = watermarkTracker.getWatermark(partition);
+            if (watermark.equals(Instant.MIN)) {
+                continue;
+            }
+
+            int pvEvicted = emittedPageViewStore.evictFinalizedPageViews(watermark);
+
+            Instant clickCutoff =
+                    watermark.minus(ClickStateStore.ATTRIBUTION_WINDOW);
+
+            int clicksEvicted =
+                    clickStore.evictOldClicks(clickCutoff);
+
+            if (pvEvicted > 0 || clicksEvicted > 0) {
+                log.debug(
+                        "Eviction of partition {}: pageViews={}, clicks={}",
+                        partition, pvEvicted, clicksEvicted
+                );
+            }
+        }
+    }
+
+    private AttributedPageView buildAttributedPageView(
+            PageViewEvent pageView,
+            AdClickEvent click
+    ) {
         return AttributedPageView.builder()
                 .pageViewId(pageView.getEventId())
                 .userId(pageView.getUserId())
@@ -115,51 +170,5 @@ public class JoinEngine {
                         click != null ? click.getClickId() : null
                 )
                 .build();
-
-    }
-
-
-    /**
-     * Scheduled task to evict old clicks from state.
-     * Runs every 30 seconds to prevent unbounded memory growth.
-     *
-     * - Evict clicks older than the watermark cutoff
-     * - Use clickStore.evictOldClicks() with appropriate cutoff time
-     */
-//    @Scheduled(fixedRate = 30000)
-    public void evictOldClicks() {
-        log.debug("Running state eviction");
-        Instant cutoffTime =
-                Instant.now()
-                        .minus(watermarkTracker.getAllowedLateness())
-                        .minus(ClickStateStore.ATTRIBUTION_WINDOW);
-
-
-        int numberOfEventsEvicted = clickStore.evictOldClicks(cutoffTime);
-        if (numberOfEventsEvicted > 0) {
-            log.debug("Number of evicted click events {}", numberOfEventsEvicted);
-        }
-
-
-    }
-
-    /**
-     * Scheduled task to evict finalized page views
-     * Runs every 30 seconds to prevent unbounded memory growth.
-     *
-     * - Evict pageViews older than the watermark cutoff
-     * - Use emittedPageViewStore.evictFinalized() with appropriate cutoff time
-     */
-//    @Scheduled(fixedRate = 30000)
-    public void evictFinalizedPageViews() {
-        Instant cutoffTime =
-                Instant.now()
-                        .minus(watermarkTracker.getAllowedLateness())
-                        .minus(ClickStateStore.ATTRIBUTION_WINDOW);
-
-        int numberOfEmittedPageViewsEvicted =  emittedPageViewStore.evictFinalized(cutoffTime);
-        if (numberOfEmittedPageViewsEvicted > 0) {
-            log.debug("Number of evicted page view events {}", numberOfEmittedPageViewsEvicted);
-        }
     }
 }

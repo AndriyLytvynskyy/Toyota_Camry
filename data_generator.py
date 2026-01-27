@@ -46,7 +46,7 @@ def generate_test_data():
     page_views = []
     ad_clicks = []
 
-    # # User 1: Normal scenario - click before page view
+    # # # User 1: Normal scenario - click before page view
     ad_clicks.append({
         'user_id': 'user_1',
         'event_time': (base_time + timedelta(minutes=5)).isoformat(),
@@ -63,90 +63,90 @@ def generate_test_data():
         'processing_time': base_time + timedelta(minutes=10, seconds=2)
     })
 
-    # # User 2: Click arrives AFTER page view (out of order, within lateness)
-    # page_views.append({
-    #     'user_id': 'user_2',
-    #     'event_time': (base_time + timedelta(minutes=15)).isoformat(),
-    #     'url': 'https://example.com/product2',
-    #     'event_id': 'pv_2',
-    #     'processing_time': base_time + timedelta(minutes=15, seconds=1)
-    # })
-    #
-    # ad_clicks.append({
-    #     'user_id': 'user_2',
-    #     'event_time': (base_time + timedelta(minutes=12)).isoformat(),
-    #     'campaign_id': 'campaign_B',
-    #     'click_id': 'click_2',
-    #     'processing_time': base_time + timedelta(minutes=16, seconds=0)  # Late arrival
-    # })
-    #
-    # # User 3: Multiple clicks in window - should pick latest
-    # ad_clicks.append({
-    #     'user_id': 'user_3',
-    #     'event_time': (base_time + timedelta(minutes=20)).isoformat(),
-    #     'campaign_id': 'campaign_C',
-    #     'click_id': 'click_3a',
-    #     'processing_time': base_time + timedelta(minutes=20, seconds=1)
-    # })
-    #
-    # ad_clicks.append({
-    #     'user_id': 'user_3',
-    #     'event_time': (base_time + timedelta(minutes=25)).isoformat(),
-    #     'campaign_id': 'campaign_D',
-    #     'click_id': 'click_3b',
-    #     'processing_time': base_time + timedelta(minutes=25, seconds=1)
-    # })
-    #
-    # page_views.append({
-    #     'user_id': 'user_3',
-    #     'event_time': (base_time + timedelta(minutes=30)).isoformat(),
-    #     'url': 'https://example.com/product3',
-    #     'event_id': 'pv_3',
-    #     'processing_time': base_time + timedelta(minutes=30, seconds=2)
-    # })
-    #
-    # #User 4: Click outside 30-minute window - should NOT be attributed
-    # ad_clicks.append({
-    #     'user_id': 'user_4',
-    #     'event_time': (base_time + timedelta(minutes=35)).isoformat(),
-    #     'campaign_id': 'campaign_E',
-    #     'click_id': 'click_4',
-    #     'processing_time': base_time + timedelta(minutes=35, seconds=1)
-    # })
-    #
-    # page_views.append({
-    #     'user_id': 'user_4',
-    #     'event_time': (base_time + timedelta(minutes=70)).isoformat(),  # 35 minutes later
-    #     'url': 'https://example.com/product4',
-    #     'event_id': 'pv_4',
-    #     'processing_time': base_time + timedelta(minutes=70, seconds=2)
-    # })
-    #
-    # # User 5: Very late event (beyond allowed lateness) - should be dropped
-    # ad_clicks.append({
-    #     'user_id': 'user_5',
-    #     'event_time': (base_time + timedelta(minutes=40)).isoformat(),
-    #     'campaign_id': 'campaign_F',
-    #     'click_id': 'click_5',
-    #     'processing_time': base_time + timedelta(minutes=50, seconds=0)  # 10 min late (beyond 2 min lateness)
-    # })
-    #
-    # page_views.append({
-    #     'user_id': 'user_5',
-    #     'event_time': (base_time + timedelta(minutes=45)).isoformat(),
-    #     'url': 'https://example.com/product5',
-    #     'event_id': 'pv_5',
-    #     'processing_time': base_time + timedelta(minutes=45, seconds=2)
-    # })
-    #
-    # # User 6: No click - page view with no attribution
-    # page_views.append({
-    #     'user_id': 'user_6',
-    #     'event_time': (base_time + timedelta(minutes=80)).isoformat(),
-    #     'url': 'https://example.com/product6',
-    #     'event_id': 'pv_6',
-    #     'processing_time': base_time + timedelta(minutes=80, seconds=1)
-    # })
+    # User 2: Click arrives AFTER page view (out of order, within lateness)
+    page_views.append({
+        'user_id': 'user_2',
+        'event_time': (base_time + timedelta(minutes=15)).isoformat(),
+        'url': 'https://example.com/product2',
+        'event_id': 'pv_2',
+        'processing_time': base_time + timedelta(minutes=15, seconds=1)
+    })
+
+    ad_clicks.append({
+        'user_id': 'user_2',
+        'event_time': (base_time + timedelta(minutes=12)).isoformat(),
+        'campaign_id': 'campaign_B',
+        'click_id': 'click_2',
+        'processing_time': base_time + timedelta(minutes=16, seconds=0)  # Late arrival
+    })
+
+    # User 3: Multiple clicks in window - should pick latest
+    ad_clicks.append({
+        'user_id': 'user_3',
+        'event_time': (base_time + timedelta(minutes=20)).isoformat(),
+        'campaign_id': 'campaign_C',
+        'click_id': 'click_3a',
+        'processing_time': base_time + timedelta(minutes=20, seconds=1)
+    })
+
+    ad_clicks.append({
+        'user_id': 'user_3',
+        'event_time': (base_time + timedelta(minutes=25)).isoformat(),
+        'campaign_id': 'campaign_D',
+        'click_id': 'click_3b',
+        'processing_time': base_time + timedelta(minutes=25, seconds=1)
+    })
+
+    page_views.append({
+        'user_id': 'user_3',
+        'event_time': (base_time + timedelta(minutes=30)).isoformat(),
+        'url': 'https://example.com/product3',
+        'event_id': 'pv_3',
+        'processing_time': base_time + timedelta(minutes=30, seconds=2)
+    })
+
+    #User 4: Click outside 30-minute window - should NOT be attributed
+    ad_clicks.append({
+        'user_id': 'user_4',
+        'event_time': (base_time + timedelta(minutes=35)).isoformat(),
+        'campaign_id': 'campaign_E',
+        'click_id': 'click_4',
+        'processing_time': base_time + timedelta(minutes=35, seconds=1)
+    })
+
+    page_views.append({
+        'user_id': 'user_4',
+        'event_time': (base_time + timedelta(minutes=70)).isoformat(),  # 35 minutes later
+        'url': 'https://example.com/product4',
+        'event_id': 'pv_4',
+        'processing_time': base_time + timedelta(minutes=70, seconds=2)
+    })
+
+    # User 5: Very late event (beyond allowed lateness) - should be dropped
+    ad_clicks.append({
+        'user_id': 'user_5',
+        'event_time': (base_time + timedelta(minutes=40)).isoformat(),
+        'campaign_id': 'campaign_F',
+        'click_id': 'click_5',
+        'processing_time': base_time + timedelta(minutes=50, seconds=0)  # 10 min late (beyond 2 min lateness)
+    })
+
+    page_views.append({
+        'user_id': 'user_5',
+        'event_time': (base_time + timedelta(minutes=45)).isoformat(),
+        'url': 'https://example.com/product5',
+        'event_id': 'pv_5',
+        'processing_time': base_time + timedelta(minutes=45, seconds=2)
+    })
+
+    # User 6: No click - page view with no attribution
+    page_views.append({
+        'user_id': 'user_6',
+        'event_time': (base_time + timedelta(minutes=80)).isoformat(),
+        'url': 'https://example.com/product6',
+        'event_id': 'pv_6',
+        'processing_time': base_time + timedelta(minutes=80, seconds=1)
+    })
 
     return page_views, ad_clicks
 

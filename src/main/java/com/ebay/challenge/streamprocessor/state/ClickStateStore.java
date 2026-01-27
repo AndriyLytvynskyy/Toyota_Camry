@@ -15,10 +15,10 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Stores ad click events partitioned by user_id for efficient windowed joins.
- *
+ * <p>
  * Thread-safe implementation with per-user locking for fine-grained concurrency.
  * Implements state eviction to prevent unbounded memory growth.
- *
+ * <p>
  * TODO: Implement thread-safe state storage and retrieval
  */
 @Slf4j
@@ -30,71 +30,92 @@ public class ClickStateStore {
 
     // Hint: Consider using ConcurrentHashMap and TreeSet for thread-safe, sorted storage
     private final ConcurrentMap<String, TreeSet<AdClickEvent>> clicksPerUser = new ConcurrentHashMap<>();
+
+    // Thredad Safe Counter - guarantees correct visibility across threads,
+    // this actually helps for observability, debugging and capacity planning
+    // CAS (compare and swap) - lock free CPU instructions here
     private final AtomicLong totalClicks = new AtomicLong(0);
 
+    /**
+     * We guarantee deterministic ordering here:
+     * <p>
+     * Here we ensure that clicks with same timestamp are not accidentally
+     * dropped by the TreeSet
+     */
     private static final Comparator<AdClickEvent> CLICKS_ORDER_MOST_RECENT_FIRST = Comparator
-            .comparing(AdClickEvent::getEventTime, Comparator.reverseOrder());
+            .comparing(AdClickEvent::getEventTime, Comparator.reverseOrder())
+            .thenComparing(AdClickEvent::getClickId);
 
     /**
      * Add a click event to the state store.
-     *
+     * <p>
      * - Use locks for thread safety
      * - Store clicks sorted by event time (most recent first)
      * - Handle concurrent access properly
+     * <p>
+     * Here we need to synchronize on TreeSet as ConcurrentHashMap makes access to the map thread-safe, not access to
+     * the objects stored inside it.
+     * Multiple threads can safely:
+     * add/remove entries
+     * call compute, get, put
      *
      * @param click the ad click event
      */
     public void addClick(AdClickEvent click) {
         log.debug("Adding click {} for user {}", click.getClickId(), click.getUserId());
         clicksPerUser.compute(click.getUserId(), (userId, set) -> {
-          if (set == null){
-              set = new TreeSet<>(CLICKS_ORDER_MOST_RECENT_FIRST);
-          }
-          boolean added = set.add(click);
-          if (added){
-              totalClicks.incrementAndGet();
+            if (set == null) {
+                set = new TreeSet<>(CLICKS_ORDER_MOST_RECENT_FIRST);
             }
-          return set;
+
+            // we make sure that all TreeSet mutations are synchronized
+            // safe under concurrent listeners
+            synchronized (set) {
+                boolean added = set.add(click);
+                if (added) {
+                    totalClicks.incrementAndGet();
+                }
+            }
+            return set;
         });
     }
 
     /**
      * Helper predicate which checks if click event is in specific window
-     * @param click AdClickEvent
+     *
+     * @param click        AdClickEvent
      * @param pageViewTime Time of page view
-     * @param windowStart Window Start
      * @return True if in range of windowStart - pageViewTime
      */
     private boolean isClickWithinAttributionWindow(
             AdClickEvent click,
-            Instant pageViewTime,
-            Instant windowStart
+            Instant pageViewTime
     ) {
+        Instant windowStart = pageViewTime.minus(ATTRIBUTION_WINDOW);
         Instant t = click.getEventTime();
         return !t.isAfter(pageViewTime) && !t.isBefore(windowStart);
     }
 
     /**
      * Find the most recent click for a user within the attribution window.
-     *
+     * <p>
      * - Search for clicks in window: [pageViewTime - 30 minutes, pageViewTime]
      * - Return the most recent click within the window
      * - Return null if no click found
      *
-     * @param userId the user ID
+     * @param userId       the user ID
      * @param pageViewTime the page view event time
      * @return the most recent click within 30 minutes before the page view, or null if none found
      */
     public AdClickEvent findAttributableClick(String userId, Instant pageViewTime) {
         log.debug("Finding attributable click for user {} at time {}", userId, pageViewTime);
         TreeSet<AdClickEvent> clicks = clicksPerUser.get(userId);
-        if (clicks == null || clicks.isEmpty()){
+        if (clicks == null || clicks.isEmpty()) {
             return null;
         }
-        Instant windowStart = pageViewTime.minus(ATTRIBUTION_WINDOW);
         synchronized (clicks) {
             return clicks.stream()
-                    .filter(c -> isClickWithinAttributionWindow(c, pageViewTime, windowStart)
+                    .filter(c -> isClickWithinAttributionWindow(c, pageViewTime)
                     ).findFirst().orElse(null);
         }
     }
@@ -102,7 +123,7 @@ public class ClickStateStore {
     /**
      * Evict old clicks that are beyond the retention window.
      * Prevents unbounded memory growth.
-     *
+     * <p>
      * - Remove clicks older than the cutoff time
      * - Clean up empty user entries
      * - Return count of evicted clicks
@@ -119,14 +140,14 @@ public class ClickStateStore {
             TreeSet<AdClickEvent> set = entry.getValue();
             synchronized (set) {
                 Iterator<AdClickEvent> it = set.iterator();
-                while (it.hasNext()){
+                while (it.hasNext()) {
                     AdClickEvent click = it.next();
-                    if (click.getEventTime().isBefore(cutoffTime)){
+                    if (click.getEventTime().isBefore(cutoffTime)) {
                         it.remove();
                         evicted++;
                         totalClicks.decrementAndGet();
                     }
-                    if (set.isEmpty()){
+                    if (set.isEmpty()) {
                         clicksPerUser.remove(entry.getKey(), set);
                     }
                 }
