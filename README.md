@@ -1,5 +1,5 @@
 # Toyota Camry Processor
-
+I ended up implementing 'emit immediately, update later' mode. Please see my text below.
 ## Watermark logic
 Both input streams `ad_click` and `page_views` are partitioned by user_id. It means that: 
 * all events for a given `user_id` go to the same Kafka partition
@@ -104,7 +104,7 @@ Throughput scales primarily with the number of Kafka partitions.
 We have a concurrency value of 3 configured - one thread processed one partition at a time
 
 ### State size
-Processor maintains in-mempry state for: ClickState, PageViewState
+Processor maintains in-memory state for: ClickState, PageViewState
 Watermarks ensure that state does not grow unbounded even under out-of-order arrival.
 
 ### Horizontal scaling
@@ -116,10 +116,10 @@ Multiple instances of the processor can be run in parallel:
 
 
 ## Tests
-- Out-of-order events
-- Late data
-- Restart with committed offsets
-- Concurrent partitions
+- Out-of-order events  - see `scenarios.TestOutOfOrderEvents` in test folder
+- Late data - see `scenarios.TestLateData` in test folder
+- Restart with committed offsets - see `scenarios.TestRestartCommittedOffsets` in test folder
+- Concurrent partitions - - see `scenarios.TestConcurrentPartitions` in test folder
 
 ## Setup instructions
 ```
@@ -152,6 +152,20 @@ Check that page_views are stored:
 ```
 sqlite3 output/attributed_page_views.db
 
-select * from attributed_page_views;
+select count(*) from attributed_page_views;
+6
+
+select page_view_id, user_id, event_time, attributed_campaign_id, attributed_click_id from attributed_page_views;
+
 ```
-You should see expected output: 
+You should see expected output that was produced by `data_generator` above: 
+
+```
+sqlite> select page_view_id, user_id, event_time, attributed_campaign_id, attributed_click_id from attributed_page_views order by page_view_id;
+pv_1|user_1|2024-01-01T12:10:00Z|campaign_A|click_1
+pv_2|user_2|2024-01-01T12:15:00Z|campaign_B|click_2
+pv_3|user_3|2024-01-01T12:30:00Z|campaign_D|click_3b
+pv_4|user_4|2024-01-01T13:10:00Z||
+pv_5|user_5|2024-01-01T12:45:00Z|campaign_F|click_5
+pv_6|user_6|2024-01-01T13:20:00Z||
+```
