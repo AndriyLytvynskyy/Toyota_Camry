@@ -48,7 +48,7 @@ public class TestRestartCommittedOffsets {
 
         // Assert output before crash
         assertThat(sink1.records()).hasSize(1);
-        assertThat(sink1.records().get(0).getAttributedClickId())
+        assertThat(sink1.records().getFirst().getAttributedClickId())
                 .isEqualTo("click_1");
 
         // ---------- Here we stopped and we are going to restart----------
