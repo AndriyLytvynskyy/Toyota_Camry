@@ -94,7 +94,6 @@ public class StreamConsumer {
                 record.partition(), record.offset());
 
             PageViewEvent pageView = objectMapper.readValue(record.value(), PageViewEvent.class);
-            log.info("Page View Received = {}", pageView);
 
             pageView.setPartition(record.partition());
             pageView.setOffset(record.offset());
