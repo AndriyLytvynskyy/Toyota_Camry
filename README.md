@@ -125,7 +125,9 @@ Multiple instances of the processor can be run in parallel:
 ## Potential risks and limitations
 - Output delivery: at-least-once
 - Join state: in memory, after restart - late updates are not guaranteed
-- Late messages are dropped for simplicity (dlq might be a better option)
+- Late messages are dropped for simplicity (dead-letter-queue might be a better option)
+- UI is designed for testing purposes - to check test scenarios
+
  
 
 ## Setup instructions
