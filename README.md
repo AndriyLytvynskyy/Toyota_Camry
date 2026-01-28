@@ -169,3 +169,27 @@ pv_4|user_4|2024-01-01T13:10:00Z||
 pv_5|user_5|2024-01-01T12:45:00Z|campaign_F|click_5
 pv_6|user_6|2024-01-01T13:20:00Z||
 ```
+
+## UI for testing
+For testing purposes I built simple UI relying on package 'spring-boot-starter-web'. 
+After starting your app - if you want to use UI - you can go to: 'http://localhost:8081'. It is useful to go through scenarios
+and then see how number of clicks and page_views changes per partition, especially if testing across multiple partitions is required: 
+To increase number of partitions for testing one could login to confluent kafka image 'confluentinc/cp-kafka:7.5.0' like the following: 
+```
+docker ps
+
+CONTAINER ID   IMAGE                             COMMAND                  CREATED       STATUS                 PORTS                                            NAMES
+ccb8d880025c   provectuslabs/kafka-ui:latest     "/bin/sh -c 'java --…"   5 hours ago   Up 5 hours             0.0.0.0:8080->8080/tcp                           kafka-ui
+5aa021463c3f   toyota_camry-dev                  "sleep infinity"      
+58a7eea2588c   confluentinc/cp-kafka:7.5.0       "/etc/confluent/dock…"   5 hours ago  
+
+# and now we extend number of partitions to 6 assuming that in our scenario we will have 6 user_id
+docker exec -it 58a7eea2588c bash
+kafka-topics   --bootstrap-server localhost:9092   --alter   --topic ad_clicks   --partitions 6
+kafka-topics   --bootstrap-server localhost:9092   --alter   --topic page_views   --partitions 6
+ 
+```
+![img.png](img.png)
+
+
+
