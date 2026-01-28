@@ -126,10 +126,9 @@ Multiple instances of the processor can be run in parallel:
 - Output delivery: at-least-once
 - Join state: in memory, after restart - late updates are not guaranteed
 - Late messages are dropped for simplicity (dead-letter-queue might be a better option)
-- UI is designed for testing purposes - to check test scenarios
+- UI is designed for testing purposes to check test scenarios which could be not intuitive
 
  
-
 ## Setup instructions
 ```
  docker compose up -d zookeeper kafka kafka-ui
