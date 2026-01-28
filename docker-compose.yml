@@ -11,6 +11,9 @@ services:
       - challenge-network
     depends_on:
       - kafka
+    ports:
+      - "8081:8081"
+
 
   # Zookeeper - required for Kafka
   zookeeper:

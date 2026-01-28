@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
- * Stores already-emitted page views for Option B (emit immediately, update later).
+ * Stores already-emitted page views `emit immediately, update later` mode.
  *
  * A page view can be updated by late clicks until it is finalized by the watermark.
  */
@@ -48,11 +48,12 @@ public class EmittedPageViewStore {
      * - page view is not finalized by watermark
      * - click improves attribution
      */
-    public void tryUpdateWithClick(
+    public int tryUpdateWithClick(
             AdClickEvent click,
             Instant watermark,
             Consumer<AttributedPageView> onUpdate
     ) {
+        int updates = 0;
         for (PageViewState pageViewState : state.values()) {
             PageViewEvent pv = pageViewState.pageView;
 
@@ -62,8 +63,7 @@ public class EmittedPageViewStore {
             }
 
             // Stop updates after finalization
-            if (!watermark.equals(Instant.MIN)
-                    && pv.getEventTime().isBefore(watermark)) {
+            if (isFinalizedByWatermark(pv.getEventTime(), watermark)) {
                 continue;
             }
 
@@ -80,7 +80,7 @@ public class EmittedPageViewStore {
             }
 
             synchronized (pageViewState) {
-                // Update only if better click
+                // Update only if click is newer than the one we have in page_view
                 if (pageViewState.attributedClickTime == null
                         || click.getEventTime().isAfter(pageViewState.attributedClickTime)) {
 
@@ -96,7 +96,7 @@ public class EmittedPageViewStore {
 
                     pageViewState.attributedClickTime = click.getEventTime();
                     onUpdate.accept(updated);
-
+                    updates++;
                     log.info(
                             "Updated page view {} with late click {}",
                             pv.getEventId(), click.getClickId()
@@ -104,8 +104,13 @@ public class EmittedPageViewStore {
                 }
             }
         }
+        return updates;
     }
 
+    private boolean isFinalizedByWatermark(Instant eventTime, Instant watermark) {
+        return !watermark.equals(Instant.MIN)
+                && !eventTime.isAfter(watermark);
+    }
     /**
      * Evict finalized page views.
      *
@@ -113,14 +118,9 @@ public class EmittedPageViewStore {
      *   watermark >= pageView.eventTime
      */
     public int evictFinalizedPageViews(Instant watermark) {
-        if (watermark.equals(Instant.MIN)) {
-            return 0;
-        }
-
         int before = state.size();
-
         state.entrySet().removeIf(entry ->
-                entry.getValue().pageView.getEventTime().isBefore(watermark)
+                isFinalizedByWatermark(entry.getValue().pageView.getEventTime(), watermark)
         );
 
         int evicted = before - state.size();

@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
+
 public class EmittedPageViewStoreTest {
 
     @Test
@@ -55,5 +56,6 @@ public class EmittedPageViewStoreTest {
         // Then: page view is removed
         assertThat(store.size()).isEqualTo(0);
     }
+
 
 }

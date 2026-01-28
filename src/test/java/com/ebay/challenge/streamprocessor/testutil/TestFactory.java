@@ -1,6 +1,7 @@
 package com.ebay.challenge.streamprocessor.testutil;
 
 import com.ebay.challenge.streamprocessor.engine.JoinEngine;
+import com.ebay.challenge.streamprocessor.metrics.NoOpMetrics;
 import com.ebay.challenge.streamprocessor.model.AdClickEvent;
 import com.ebay.challenge.streamprocessor.model.PageViewEvent;
 import com.ebay.challenge.streamprocessor.output.OutputSink;
@@ -27,7 +28,8 @@ public final class TestFactory {
                 clickStore,
                 pageViewStore,
                 watermarkTracker,
-                sink
+                sink,
+                new NoOpMetrics()
         );
     }
 

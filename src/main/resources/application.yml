@@ -33,3 +33,7 @@ logging:
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: ./logs/stream-processor.log
+
+server:
+  port: 8081
+  address: 0.0.0.0

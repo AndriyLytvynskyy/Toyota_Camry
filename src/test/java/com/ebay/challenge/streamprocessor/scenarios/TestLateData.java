@@ -41,4 +41,37 @@ public class TestLateData {
         assertThat(result.getAttributedClickId()).isEqualTo("new_click");
 
     }
+
+    @Test
+    void testLatePageViewIsDropped() {
+        InMemoryOutputSink sink = new InMemoryOutputSink();
+        JoinEngine engine = TestFactory.createJoinEngine(sink, 1); // 1 minute lateness
+
+        Instant base = Instant.parse("2026-01-27T12:00:00Z");
+
+        // Step 1: Advance clicks stream
+        engine.processClick(
+                click("click_new", "user1", base.plusSeconds(600), 0) // T + 10
+        );
+
+        // Step 2: Advance page view stream
+        engine.processPageView(
+                pageView("pv_on_time", "user1", base.plusSeconds(660), 0) // T + 11
+        );
+
+         /*
+           watermark = min(12:10, 12:11) - 1min = 12:09
+         */
+
+        // Step 3: Very late page view
+        engine.processPageView(
+                pageView("pv_late", "user1", base.plusSeconds(300), 0) // T + 5
+        );
+
+        assertThat(sink.records()).hasSize(1);
+
+        AttributedPageView result = sink.records().getFirst();
+        assertThat(result.getPageViewId()).isEqualTo("pv_on_time");
+    }
+
 }

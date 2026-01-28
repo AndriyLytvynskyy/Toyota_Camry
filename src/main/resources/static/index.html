@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Stream Processor Dashboard</title>
+    <link rel="stylesheet" href="/styles.css"/>
+</head>
+
+<body>
+
+<h1>📊 Stream Processor Dashboard</h1>
+<p>Live metrics from JoinEngine</p>
+
+<div class="grid">
+
+    <div class="card">
+        <h2>Events Received</h2>
+        <div>Clicks: <span id="clicksReceived" class="metric">0</span></div>
+        <div>Page Views: <span id="pageViewsReceived" class="metric">0</span></div>
+    </div>
+
+    <div class="card">
+        <h2>Output</h2>
+        <div>Emitted: <span id="pageViewsEmitted" class="metric">0</span></div>
+        <div>Updated: <span id="pageViewsUpdated" class="metric">0</span></div>
+    </div>
+
+    <div class="card">
+        <h2>State Size</h2>
+        <div>Clicks: <span id="clickStateSize" class="metric">0</span></div>
+        <div>Page Views: <span id="pageViewStateSize" class="metric">0</span></div>
+    </div>
+
+    <div class="card join-watermarks">
+        <h2>Join Watermarks</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Partition</th>
+                <th>Page Views max</th>
+                <th>Ad Clicks max</th>
+                <th>Join watermark</th>
+            </tr>
+            </thead>
+            <tbody id="joinWatermarkTable"></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Status</h2>
+        <div>Last updated:</div>
+        <div><span id="lastUpdatedAt">—</span></div>
+    </div>
+
+</div>
+
+<script src="/dashboard.js"></script>
+</body>
+</html>

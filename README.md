@@ -74,7 +74,7 @@ while in `emit-on-watermark` this is more for targets/sinks which do not support
 
 ### Shared state and Locking
 Processor maintain in-memory state for:
-* recent clicks (ClicksStateStore)
+* recent clicks (ClickStateStore)
 * emitted page views which wait for possible updates (EmittedPageViewStore)
 * per-partition watermark progress
 
@@ -120,6 +120,12 @@ Multiple instances of the processor can be run in parallel:
 - Late data - see `scenarios.TestLateData` in test folder
 - Restart with committed offsets - see `scenarios.TestRestartCommittedOffsets` in test folder
 - Concurrent partitions - - see `scenarios.TestConcurrentPartitions` in test folder
+- There are also other tests per each package with more scenarios
+
+## Potential risks and limitations
+- Output delivery: at-least-once
+- Join state: in memory, thats why after restart - late updates are not guaranteed
+ 
 
 ## Setup instructions
 ```
@@ -187,9 +193,18 @@ ccb8d880025c   provectuslabs/kafka-ui:latest     "/bin/sh -c 'java --…"   5 ho
 docker exec -it 58a7eea2588c bash
 kafka-topics   --bootstrap-server localhost:9092   --alter   --topic ad_clicks   --partitions 6
 kafka-topics   --bootstrap-server localhost:9092   --alter   --topic page_views   --partitions 6
- 
+
+python data_generator.py
+
 ```
 ![img.png](img.png)
+
+There are also a couple of scenarios under `scenarios` folder to check basic flows and monitor metrics: 
+``` 
+python scenarios/custom_data_generator.py --scenario metrics_reference
+```
+![img_1.png](img_1.png)
+
 
 
 

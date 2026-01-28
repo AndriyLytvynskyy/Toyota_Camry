@@ -7,18 +7,15 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Tracks event-time watermarks for Option B (emit-on-watermark).
- *
+ * Tracks event-time watermarks.
  * A watermark represents the event-time boundary before which the system
  * assumes no more events will arrive (accounting for allowed lateness).
- *
  * Logical partition id is:
  *   "<topic>_<partition>"
- *
  * Example:
  *   ad_clicks_0
  *   page_views_0
@@ -40,8 +37,10 @@ public class WatermarkTracker {
      * logicalPartitionId -> maxEventTimeSeen
      * Example key: "ad_clicks_0" - we need to know which stream it is, not to mix partitions together
      */
-    private final Map<String, Instant> partitionMaxEventTimeSeen =
+    private final ConcurrentHashMap<String, Instant> partitionMaxEventTimeSeen =
             new ConcurrentHashMap<>();
+
+    private final Set<Integer> activePartitions = ConcurrentHashMap.newKeySet();
 
     public WatermarkTracker(
             @Value("${watermark.allowed-lateness-minutes:2}") int allowedLatenessMinutes
@@ -66,6 +65,7 @@ public class WatermarkTracker {
      * @param eventTime event-time timestamp
      */
     public void updateWatermark(StreamType stream, int partition, Instant eventTime) {
+        activePartitions.add(partition);
         String logicalPartitionId = stream.logicalPartition(partition);
         log.debug("Updating watermark for partition {} with event time {}", logicalPartitionId, eventTime);
         partitionMaxEventTimeSeen.merge(
@@ -123,5 +123,13 @@ public class WatermarkTracker {
 
     public Duration getAllowedLateness() {
         return allowedLateness;
+    }
+
+    public ConcurrentHashMap<String, Instant> getPartitionMaxEventTimeSeen(){
+        return partitionMaxEventTimeSeen;
+    }
+
+    public Set<Integer> getActivePartitions() {
+        return Set.copyOf(activePartitions);
     }
 }

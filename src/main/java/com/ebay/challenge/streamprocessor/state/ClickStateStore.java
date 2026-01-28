@@ -31,9 +31,6 @@ public class ClickStateStore {
     // Hint: Consider using ConcurrentHashMap and TreeSet for thread-safe, sorted storage
     private final ConcurrentMap<String, TreeSet<AdClickEvent>> clicksPerUser = new ConcurrentHashMap<>();
 
-    // Thredad Safe Counter - guarantees correct visibility across threads,
-    // this actually helps for observability, debugging and capacity planning
-    // CAS (compare and swap) - lock free CPU instructions here
     private final AtomicLong totalClicks = new AtomicLong(0);
 
     /**
@@ -133,7 +130,6 @@ public class ClickStateStore {
      */
     public int evictOldClicks(Instant cutoffTime) {
 
-        log.debug("Evicting clicks older than {}", cutoffTime);
         int evicted = 0;
 
         for (var entry : clicksPerUser.entrySet()) {

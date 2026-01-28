@@ -7,7 +7,7 @@ public enum StreamType {
     AD_CLICKS("ad_clicks"),
     PAGE_VIEWS("page_views");
 
-    private final String topicName;
+    public final String topicName;
 
     StreamType(String topicName){
         this.topicName = topicName;
