@@ -51,15 +51,14 @@ public class TestRestartCommittedOffsets {
         assertThat(sink1.records().getFirst().getAttributedClickId())
                 .isEqualTo("click_1");
 
-        // ---------- Here we stopped and we are going to restart----------
+        // Crash after commit and start with new commit
         engine1 = null;
 
-        // ---------- Phase 2: Restart ----------
+        //simulate restart
         InMemoryOutputSink sink2 = new InMemoryOutputSink();
         JoinEngine engine2 = TestFactory.createJoinEngine(sink2);
 
         // Resume from committed offsets + 1
-        // (no replay of previous events)
         PageViewEvent pv2 = PageViewEvent.builder()
                 .eventId("pv_2")
                 .userId("user_2")
@@ -71,10 +70,46 @@ public class TestRestartCommittedOffsets {
 
         engine2.processPageView(pv2);
 
-        // ---------- Assertions ----------
-        // No duplicate emission for pv_1
         assertThat(sink2.records())
                 .extracting(AttributedPageView::getPageViewId)
                 .containsExactly("pv_2");
+    }
+
+    @Test
+    public void testCrashAfterWriteBeforeCommitCausesReplay() {
+
+        InMemoryOutputSink sink = new InMemoryOutputSink();
+        JoinEngine engine1 = TestFactory.createJoinEngine(sink);
+
+        long offset = 0;
+
+        PageViewEvent pv = PageViewEvent.builder()
+                .eventId("pv_1")
+                .userId("user_1")
+                .eventTime(Instant.parse("2024-01-01T12:00:00Z"))
+                .url("https://example.com")
+                .partition(0)
+                .offset(offset)
+                .build();
+
+        // First processing (write happens)
+        engine1.processPageView(pv);
+
+        assertThat(sink.records()).hasSize(1);
+
+        // fails before commit
+        engine1 = null;
+
+        // Restart
+        JoinEngine engine2 = TestFactory.createJoinEngine(sink);
+
+        // Same event replayed
+        engine2.processPageView(pv);
+
+        // At-least-once semantics - now we have duplicate writes which means - update happens
+        assertThat(sink.records()).hasSize(2);
+        assertThat(sink.records())
+                .extracting(AttributedPageView::getPageViewId)
+                .containsExactly("pv_1", "pv_1");
     }
 }

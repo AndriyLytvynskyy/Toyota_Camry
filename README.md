@@ -101,7 +101,7 @@ Throughput scales primarily with the number of Kafka partitions.
 * Increasing partition count increases parallelism without changing application logic
 
 ### Consumer threads
-We have a concurrency value of 3 configured - one thread processed one partition at a time
+We have a concurrency value of 3 configured - one thread processes one partition at a time
 
 ### State size
 Processor maintains in-memory state for: ClickState, PageViewState
@@ -124,7 +124,8 @@ Multiple instances of the processor can be run in parallel:
 
 ## Potential risks and limitations
 - Output delivery: at-least-once
-- Join state: in memory, thats why after restart - late updates are not guaranteed
+- Join state: in memory, after restart - late updates are not guaranteed
+- Late messages are dropped for simplicity (dlq might be a better option)
  
 
 ## Setup instructions
