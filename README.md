@@ -166,7 +166,8 @@ select count(*) from attributed_page_views;
 select page_view_id, user_id, event_time, attributed_campaign_id, attributed_click_id from attributed_page_views;
 
 ```
-You should see expected output that was produced by `data_generator` above: 
+You should see expected output that was produced by `data_generator` above (for event 5 I still get a click, 
+but generator mentions that this may or may not be dropped depending on the latency): 
 
 ```
 sqlite> select page_view_id, user_id, event_time, attributed_campaign_id, attributed_click_id from attributed_page_views order by page_view_id;
