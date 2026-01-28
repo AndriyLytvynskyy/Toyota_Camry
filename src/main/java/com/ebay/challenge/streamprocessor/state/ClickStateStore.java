@@ -139,6 +139,8 @@ public class ClickStateStore {
                 while (it.hasNext()) {
                     AdClickEvent click = it.next();
                     if (click.getEventTime().isBefore(cutoffTime)) {
+                        log.debug("Removing click_id {} event_time = {} cut_off time = {}, partition {} ", click.getClickId(),
+                                click.getEventTime(), cutoffTime, click.getPartition());
                         it.remove();
                         evicted++;
                         totalClicks.decrementAndGet();
@@ -150,7 +152,7 @@ public class ClickStateStore {
             }
         }
         if (evicted > 0) {
-            log.debug("Evicted {} old clicks", evicted);
+            log.debug("Evicted {} old clicks which happened before {}", evicted, cutoffTime);
         }
         return evicted;
     }

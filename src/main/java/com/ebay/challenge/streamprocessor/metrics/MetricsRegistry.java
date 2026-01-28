@@ -6,13 +6,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+/**
+ * MetricsRegistry which holds metrics for UI
+ */
 @Component
 @RequiredArgsConstructor
 public class MetricsRegistry implements Metrics {
@@ -70,17 +72,9 @@ public class MetricsRegistry implements Metrics {
         touch();
     }
 
-    /* ---------- Snapshot ---------- */
 
     @Override
     public MetricsSnapshot snapshot() {
-
-        List<JoinPartitionWatermark> joinWatermarks =
-                buildJoinWatermarks()
-                        .values()
-                        .stream()
-                        .sorted(Comparator.comparingInt(JoinPartitionWatermark::partition))
-                        .toList();
 
         return new MetricsSnapshot(
                 clicksReceived.get(),
@@ -89,7 +83,7 @@ public class MetricsRegistry implements Metrics {
                 pageViewsUpdated.get(),
                 clickStateSize.get(),
                 pageViewStateSize.get(),
-                joinWatermarks,
+                buildJoinWatermarks(),
                 lastUpdatedAt.get()
         );
     }
@@ -98,53 +92,53 @@ public class MetricsRegistry implements Metrics {
     /**
      * This method is just used for UI reports
      *
-     * @return Map with partition number and then DTO JoinPartitionWatermark to show on UI
+     * @return List with partition number and then DTO JoinPartitionWatermark to show on UI
      */
-    private Map<Integer, JoinPartitionWatermark> buildJoinWatermarks() {
+    private List<JoinPartitionWatermark> buildJoinWatermarks() {
 
-        Map<Integer, JoinPartitionWatermark> result = new HashMap<>();
+        Map<Integer, Instant> pvMaxByPartition = new HashMap<>();
+        Map<Integer, Instant> clickMaxByPartition = new HashMap<>();
 
         watermarkTracker.getPartitionMaxEventTimeSeen()
                 .forEach((logicalPartitionId, maxEventTime) -> {
+                    TopicPartition topicPart = getTopicPartition(logicalPartitionId);
 
-                    int idx = logicalPartitionId.lastIndexOf('_');
-                    if (idx < 0) {
-                        return;
+                    if (topicPart.topic().equals(StreamType.PAGE_VIEWS.topicName)) {
+                        pvMaxByPartition.put(topicPart.partition(), maxEventTime);
+                    } else if (topicPart.topic().equals(StreamType.AD_CLICKS.topicName)) {
+                        clickMaxByPartition.put(topicPart.partition(), maxEventTime);
                     }
-
-                    String stream = logicalPartitionId.substring(0, idx);
-                    int partition = Integer.parseInt(
-                            logicalPartitionId.substring(idx + 1)
-                    );
-
-                    result.compute(partition, (p, existing) -> {
-
-                        Instant pvMax =
-                                existing != null ? existing.pageViewsMaxEventTime() : null;
-                        Instant clkMax =
-                                existing != null ? existing.adClicksMaxEventTime() : null;
-
-                        if (stream.equals(StreamType.PAGE_VIEWS.topicName)) {
-                            pvMax = maxEventTime;
-                        } else if (stream.equals(StreamType.AD_CLICKS.topicName)) {
-                            clkMax = maxEventTime;
-                        }
-
-                        Instant joinWm = watermarkTracker.getWatermark(partition);
-                        if (joinWm.equals(Instant.MIN)) {
-                            joinWm = null;
-                        }
-
-                        return new JoinPartitionWatermark(
-                                partition,
-                                pvMax,
-                                clkMax,
-                                joinWm
-                        );
-                    });
                 });
 
-        return result;
+        return watermarkTracker.getActivePartitions()
+                .stream()
+                .sorted()
+                .map(partition -> {
+                    Instant joinWm = watermarkTracker.getWatermark(partition);
+                    if (joinWm.equals(Instant.MIN)) {
+                        joinWm = null;
+                    }
+
+                    return new JoinPartitionWatermark(
+                            partition,
+                            pvMaxByPartition.get(partition),
+                            clickMaxByPartition.get(partition),
+                            joinWm
+                    );
+                })
+                .toList();
+    }
+
+    private static TopicPartition getTopicPartition(String logicalPartitionId) {
+        int idx = logicalPartitionId.lastIndexOf('_');
+        String topic = logicalPartitionId.substring(0, idx);
+        int partition = Integer.parseInt(
+                logicalPartitionId.substring(idx + 1)
+        );
+        return new TopicPartition(topic, partition);
+    }
+
+    private record TopicPartition(String topic, int partition) {
     }
 
 
